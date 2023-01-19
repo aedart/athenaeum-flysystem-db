@@ -8,6 +8,7 @@ use Aedart\Contracts\MimeTypes\Exceptions\MimeTypeDetectionException;
 use Aedart\Contracts\Streams\Exceptions\StreamException;
 use Aedart\Contracts\Streams\FileStream;
 use Aedart\Contracts\Support\Helpers\Database\DbAware;
+use Aedart\Flysystem\Db\Adapters\Concerns;
 use Aedart\Flysystem\Db\Exceptions\ConnectionException;
 use Aedart\Flysystem\Db\Exceptions\DatabaseAdapterException;
 use Aedart\Support\Helpers\Database\DbTrait;
@@ -42,8 +43,7 @@ use Throwable;
  * @author Alin Eugen Deac <ade@rspsystems.com>
  * @package Aedart\Flysystem\Db\Adapters
  */
-class DatabaseAdapter implements
-    FilesystemAdapter,
+class DatabaseAdapter implements FilesystemAdapter,
     ChecksumProvider,
     DbAware
 {
@@ -68,7 +68,8 @@ class DatabaseAdapter implements
         protected string $filesTable,
         protected string $contentsTable,
         ConnectionInterface|null $connection = null,
-    ) {
+    )
+    {
         $this
             ->setDb($connection)
             ->setPathPrefix('');
@@ -121,7 +122,7 @@ class DatabaseAdapter implements
             // Ensure directory is created for given file path.
             $this->createDirectory(dirname($path), $config);
 
-            $this->transaction(function (ConnectionInterface $connection) use ($path, $contents, $config) {
+            $this->transaction(function(ConnectionInterface $connection) use($path, $contents, $config) {
                 // Set connection in config, so that it can be passed further.
                 $config = $config->extend([ 'connection' => $connection ]);
 
@@ -145,6 +146,7 @@ class DatabaseAdapter implements
 
                 // Update existing file record and its contents
                 if (isset($original)) {
+
                     $wasUpdated = (bool) $connection
                         ->table($this->filesTable)
                         ->where('path', $record['path'])
@@ -182,6 +184,7 @@ class DatabaseAdapter implements
                 // Finally, write file's contents.
                 $this->writeFileContentRecord($path, $stream, $config);
             });
+
         } catch (Throwable $e) {
             throw UnableToWriteFile::atLocation($path, $e->getMessage(), $e);
         }
@@ -235,6 +238,7 @@ class DatabaseAdapter implements
                 ->put($contents)
                 ->positionToStart()
                 ->detach();
+
         } catch (Throwable $e) {
             throw UnableToReadFile::fromLocation($path, $e->getMessage(), $e);
         }
@@ -250,7 +254,8 @@ class DatabaseAdapter implements
         }
 
         try {
-            $this->transaction(function (ConnectionInterface $connection) use ($path) {
+
+            $this->transaction(function(ConnectionInterface $connection) use($path) {
 
                 // Create new configuration to pass connection into on...
                 $config = new Config([
@@ -276,6 +281,7 @@ class DatabaseAdapter implements
                 $this->decrementReferenceCount($record->content_hash, $config);
                 $this->cleanupFileContents($config);
             });
+
         } catch (Throwable $e) {
             throw UnableToDeleteFile::atLocation($path, $e->getMessage(), $e);
         }
@@ -287,7 +293,8 @@ class DatabaseAdapter implements
     public function deleteDirectory(string $path): void
     {
         try {
-            $this->transaction(function (ConnectionInterface $connection) use ($path) {
+            $this->transaction(function(ConnectionInterface $connection) use($path) {
+
                 $this->deleteDirectoryContents($path, new Config([
                     'connection' => $connection
                 ]));
@@ -361,6 +368,7 @@ class DatabaseAdapter implements
             if (!$result) {
                 throw new RuntimeException(sprintf('Directory was not created in table: %s', $this->filesTable));
             }
+
         } catch (Throwable $e) {
             throw UnableToCreateDirectory::dueToFailure($path, $e);
         }
@@ -388,6 +396,7 @@ class DatabaseAdapter implements
             if ($affected === 0) {
                 throw new RuntimeException(sprintf('Visibility was not changed. Unable to find file or directory: %s', $path));
             }
+
         } catch (Throwable $e) {
             throw UnableToSetVisibility::atLocation($path, $e->getMessage(), $e);
         }
@@ -763,7 +772,8 @@ class DatabaseAdapter implements
         string $directory = '',
         bool $deep = false,
         Config|null $config = null
-    ): iterable {
+    ): iterable
+    {
         try {
             $connection = $this->resolveConnection($config);
 
@@ -775,22 +785,23 @@ class DatabaseAdapter implements
             $result = $connection
                 ->table($this->filesTable)
                 ->select()
-                ->when(!empty($path), function (Builder $query) use ($path, $deep) {
-                    $query->where(function (Builder $query) use ($path) {
+                ->when(!empty($path), function(Builder $query) use($path, $deep) {
+                    $query->where(function(Builder $query) use($path) {
                         $query
                             ->where('path', '=', $path)
                             ->orWhere('path', 'LIKE', "{$path}%");
                     })
 
                     // When deep listing requested
-                    ->when($deep, function (Builder $query) use ($path) {
+                    ->when($deep, function(Builder $query) use($path) {
                         $query->where('level', '>=', $this->directoryLevel($path) + 1);
-                    }, function (Builder $query) use ($path) {
+                    }, function(Builder $query) use($path) {
                         // Otherwise...
                         $query->where('level', $this->directoryLevel($path) + 1);
                     });
-                }, function (Builder $query) use ($deep) {
-                    $query->when(!$deep, function (Builder $query) {
+
+                }, function(Builder $query) use($deep) {
+                    $query->when(!$deep, function(Builder $query) {
                         // When no directory is requested ~ root level, ensure that we only list
                         // those placed at level 0 when "deep" isn't requested
                         $query->where('level', 0);
@@ -804,7 +815,7 @@ class DatabaseAdapter implements
             }
 
             $records = $result->getIterator();
-            foreach ($records as $record) {
+            foreach ($records as $record){
                 yield $this->normaliseRecord($record);
             }
         } catch (Throwable $e) {
@@ -829,7 +840,7 @@ class DatabaseAdapter implements
     protected function performCopy(string $source, string $destination, Config $config): void
     {
         $record = $this->fetchFile($source, true, $config);
-        if (!isset($record)) {
+        if(!isset($record)) {
             throw UnableToReadFile::fromLocation($source, 'File does not exist');
         }
 
